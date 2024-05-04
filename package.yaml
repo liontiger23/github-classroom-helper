@@ -21,6 +21,13 @@ description:         Please see the README on GitHub at <https://github.com/lion
 
 dependencies:
   - base >= 4.7 && < 5
+  - text
+  - bytestring
+  - base64-bytestring
+  - github-rest
+  - aeson
+  - aeson-schemas
+  - xml-conduit
 
 ghc-options:
 - -Wall
@@ -57,3 +64,5 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - github-classroom-helper
+    - tasty
+    - tasty-hunit
