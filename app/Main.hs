@@ -1,6 +1,3 @@
-module Main (main) where
+module Main (Helper.main) where
 
-import Lib
-
-main :: IO ()
-main = someFunc
+import qualified Helper

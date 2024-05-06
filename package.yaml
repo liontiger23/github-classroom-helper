@@ -28,6 +28,7 @@ dependencies:
   - aeson
   - aeson-schemas
   - xml-conduit
+  - optparse-applicative
 
 ghc-options:
 - -Wall
