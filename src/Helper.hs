@@ -36,6 +36,7 @@ import Control.Exception (IOException)
 import Control.Exception.Base (catch)
 import Helper.Util (safeReadFile, parseAndExtractPointsFromSvg)
 import Options.Applicative
+import Control.Monad (join)
 
 
 getToken = (AccessToken . strip . B.toStrict <$>) <$> safeReadFile ".github_token"
@@ -122,8 +123,8 @@ contentsEndpoint owner repo path ref =
     Just r -> "?ref=" <> r
     Nothing -> ""
 
-main :: IO ()
-main = do
+main' :: IO ()
+main' = do
   name <- execParser $ info (argument str (metavar "NAME")) fullDesc
   token <- getToken
   res <-
@@ -134,3 +135,29 @@ main = do
         ".github/badges/points-bar.svg"
         (Just "badges")
   print $ parseAndExtractPointsFromSvg $ decodeLenient $ B.fromStrict $ encodeUtf8 [get| res.content |]
+
+classroomsCommand :: IO ()
+classroomsCommand = do
+  token <- getToken
+  classroom <- runGitHubT (defaultState token) classrooms
+  print classroom
+
+assignmentsCommand :: Int -> IO ()
+assignmentsCommand cid = do
+  token <- getToken
+  assignment <- runGitHubT (defaultState token) $ classroomAssignments cid
+  print assignment
+
+opts :: Parser (IO ())
+opts = subparser
+  ( command "classrooms" (info (pure classroomsCommand) $
+    progDesc "List available classrooms" )
+ <> command "assignments" (info (assignmentsCommand <$> argument auto (metavar "CLASSROOM_ID")) $
+    progDesc "List available assignments in classroom with specified CLASSROOM_ID") )
+
+main :: IO ()
+main = join $ execParser $ info (helper <*> opts)
+  ( fullDesc
+ <> progDesc "Provides helper utilities for working with GitHub classroom and student assignments"
+ <> header "GitHub Classroom Helper" )
+
