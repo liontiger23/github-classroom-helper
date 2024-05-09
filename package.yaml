@@ -27,6 +27,8 @@ dependencies:
   - github-rest
   - aeson
   - aeson-schemas
+  - yaml
+  - boxes
   - xml-conduit
   - optparse-applicative
 

@@ -7,37 +7,28 @@
 
 module Helper (main) where
 
-import Control.Arrow (left)
-import Data.Aeson (Array, FromJSON, ToJSON, Value, decode)
-import Data.Aeson.Schema
+import Control.Monad (join)
+import Data.Aeson (Array, FromJSON, ToJSON, Value)
+import Data.Aeson.Schema (Object, get, schema)
 import Data.Aeson.Types (Result, fromJSON)
 import Data.ByteString.Base64.Lazy (decodeLenient)
 import Data.ByteString.Char8 (strip)
 import Data.ByteString.Lazy qualified as B
-import Data.Char (ord)
 import Data.List (find)
-import Data.Maybe (listToMaybe, maybeToList)
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
-import Data.Text.Read (decimal)
 import GHC.Generics (Generic)
 import GitHub.REST
-import Helper.GitHub
-import Text.XML (Document, def, parseLBS, parseLBS_)
-import Text.XML.Cursor (
-  child,
-  content,
-  fromDocument,
-  laxElement,
-  ($//),
-  (&/),
+import Helper.GitHub (
+  Classroom (classroomId),
+  classroomAssignments,
+  classrooms,
+  renderAssignments,
+  renderClassrooms,
  )
-import Control.Exception (IOException)
-import Control.Exception.Base (catch)
-import Helper.Util (safeReadFile, parseAndExtractPointsFromSvg)
-import Options.Applicative
-import Control.Monad (join)
-
+import Helper.Util (parseAndExtractPointsFromSvg, safeReadFile)
+import Options.Applicative hiding (action)
+import Data.Text.Lazy.Encoding (decodeUtf8)
 
 getToken = (AccessToken . strip . B.toStrict <$>) <$> safeReadFile ".github_token"
 
@@ -48,55 +39,6 @@ defaultState token =
     , apiVersion = "2022-11-28"
     }
 
-myClassroomId = 199096
-
-myClassroom cid = do
-  token <- getToken
-  cs <- runGitHubT (defaultState token) classrooms
-  return $ find ((== cid) . classroomId) cs
-
-testAssignments = do
-  token <- getToken
-  Just classroom <- myClassroom myClassroomId
-  arr <- runGitHubT (defaultState token) (classroomAssignments $ classroomId classroom)
-  print arr
-  print ""
-
-type ClassroomSchema =
-  [schema|
-  {
-    id: Int,
-    name: String,
-    archived: Bool,
-    url: String
-  }
-|]
-
-data Classroom = Classroom
-  { id :: Int
-  , name :: String
-  , archived :: Bool
-  , url :: String
-  }
-  deriving (Show, Generic, FromJSON, ToJSON)
-
-asClassroom :: Value -> Result (Object ClassroomSchema)
-asClassroom = fromJSON
-
-testClassrooms = do
-  token <- getToken
-  arr <- runGitHubT (defaultState token) classroomsEndpoint :: IO Array
-  mapM_ (mapM_ (\x -> print [get| x.name|])) $ mapM asClassroom arr
-
-classroomsEndpoint :: (MonadGitHubREST m, FromJSON a) => m a
-classroomsEndpoint =
-  queryGitHub
-    GHEndpoint
-      { method = GET
-      , endpoint = "/classrooms"
-      , endpointVals = []
-      , ghData = []
-      }
 
 type ContentsSchema =
   [schema|
@@ -136,17 +78,11 @@ main' = do
         (Just "badges")
   print $ parseAndExtractPointsFromSvg $ decodeLenient $ B.fromStrict $ encodeUtf8 [get| res.content |]
 
-classroomsCommand :: IO ()
-classroomsCommand = do
-  token <- getToken
-  classroom <- runGitHubT (defaultState token) classrooms
-  print classroom
-
-assignmentsCommand :: Int -> IO ()
-assignmentsCommand cid = do
-  token <- getToken
-  assignment <- runGitHubT (defaultState token) $ classroomAssignments cid
-  print assignment
+main :: IO ()
+main = join $ execParser $ info (helper <*> opts)
+  ( fullDesc
+ <> progDesc "Provides helper utilities for working with GitHub classroom and student assignments"
+ <> header "GitHub Classroom Helper" )
 
 opts :: Parser (IO ())
 opts = subparser
@@ -155,9 +91,18 @@ opts = subparser
  <> command "assignments" (info (assignmentsCommand <$> argument auto (metavar "CLASSROOM_ID")) $
     progDesc "List available assignments in classroom with specified CLASSROOM_ID") )
 
-main :: IO ()
-main = join $ execParser $ info (helper <*> opts)
-  ( fullDesc
- <> progDesc "Provides helper utilities for working with GitHub classroom and student assignments"
- <> header "GitHub Classroom Helper" )
+runGH :: GitHubT IO a -> IO a
+runGH action = do
+  token <- getToken
+  runGitHubT (defaultState token) action
+
+classroomsCommand :: IO ()
+classroomsCommand = do
+  classroom <- runGH classrooms
+  putStr $ renderClassrooms classroom
+
+assignmentsCommand :: Int -> IO ()
+assignmentsCommand cid = do
+  assignment <- runGH $ classroomAssignments cid
+  putStr $ renderAssignments assignment
 

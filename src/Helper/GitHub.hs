@@ -10,8 +10,11 @@ module Helper.GitHub (
   Classroom (..),
   classrooms,
   classroomAssignments,
+  renderClassrooms,
+  renderAssignments,
 ) where
 
+import Text.PrettyPrint.Boxes (hcat, printBox, vcat, left, text, hsep, render)
 import Data.Aeson (
   FromJSON,
   ToJSON (toJSON),
@@ -20,7 +23,7 @@ import Data.Aeson (
   (.:),
   (.=),
  )
-import Data.Aeson.Schema
+import Data.Aeson.Schema ( Object, schema )
 import Data.Aeson.Types (parseJSON)
 import Data.ByteString.Char8 (strip)
 import Data.ByteString.Lazy qualified as B
@@ -33,6 +36,8 @@ import GitHub.REST (
  )
 import GitHub.REST.Auth (Token (..))
 import GitHub.REST.Endpoint (GHEndpoint (..))
+import Data.List (transpose)
+import Helper.Util (renderTable)
 
 data Assignment = Assignment
   { assignmentId :: Int
@@ -59,6 +64,10 @@ instance FromJSON Assignment where
       <*> obj .: "invite_link"
       <*> obj .: "slug"
 
+renderAssignments :: [Assignment] -> String
+renderAssignments = renderTable ["ID", "Title", "Slug", "Invite link"] . map row
+  where row (Assignment aid atitle alink aslug) = [show aid, atitle, aslug, alink]
+
 data Classroom = Classroom
   { classroomId :: Int
   , classroomName :: String
@@ -83,6 +92,10 @@ instance FromJSON Classroom where
       <*> obj .: "name"
       <*> obj .: "archived"
       <*> obj .: "url"
+
+renderClassrooms :: [Classroom] -> String
+renderClassrooms = renderTable ["ID", "Name", "URL"] . map row
+  where row (Classroom cid cname _ curl) = [show cid, cname, curl]
 
 classrooms :: (MonadGitHubREST m) => m [Classroom]
 classrooms =
