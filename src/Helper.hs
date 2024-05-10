@@ -8,28 +8,17 @@
 module Helper (main) where
 
 import Control.Monad (join)
-import Data.Aeson (Array, FromJSON, ToJSON, Value)
-import Data.Aeson.Schema (Object, get, schema)
-import Data.Aeson.Types (Result, fromJSON)
+import Data.Aeson.Schema (get)
 import Data.ByteString.Base64.Lazy (decodeLenient)
-import Data.ByteString.Char8 (strip)
 import Data.ByteString.Lazy qualified as B
-import Data.List (find)
-import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
-import GHC.Generics (Generic)
-import GitHub.REST
 import Helper.GitHub.Endpoint (
   runGH,
   classroomAssignments,
   classrooms, contentsEndpoint, acceptedAssignments,
  )
-import Helper.GitHub (
-  Classroom (classroomId),
- )
-import Helper.Util (parseAndExtractPointsFromSvg, safeReadFile)
+import Helper.Util (parseAndExtractPointsFromSvg)
 import Options.Applicative hiding (action)
-import Data.Text.Lazy.Encoding (decodeUtf8)
 import Helper.Renderer (renderTable)
 
 main :: IO ()
@@ -48,19 +37,16 @@ opts = subparser
     progDesc "List accepted assignments of assignment with specified ASSIGNMENT_ID") )
 
 classroomsCommand :: IO ()
-classroomsCommand = do
-  classroom <- runGH classrooms
-  putStr $ renderTable classroom
+classroomsCommand = runGH classrooms
+  >>= putStr . renderTable
 
 assignmentsCommand :: Int -> IO ()
-assignmentsCommand cid = do
-  assignment <- runGH $ classroomAssignments cid
-  putStr $ renderTable assignment
+assignmentsCommand cid = runGH (classroomAssignments cid)
+  >>= putStr . renderTable
 
 acceptedAssignmentsCommand :: Int -> IO ()
-acceptedAssignmentsCommand aid = do
-  assignment <- runGH $ acceptedAssignments aid
-  putStr $ renderTable assignment
+acceptedAssignmentsCommand aid = runGH (acceptedAssignments aid)
+  >>= putStr . renderTable
 
 main' :: IO ()
 main' = do
