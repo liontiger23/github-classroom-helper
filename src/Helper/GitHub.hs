@@ -1,20 +1,12 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes #-}
 
 module Helper.GitHub (
   Assignment (..),
   Classroom (..),
-  classrooms,
-  classroomAssignments,
-  renderClassrooms,
-  renderAssignments,
+  AcceptedAssignment (..),
 ) where
 
-import Text.PrettyPrint.Boxes (hcat, printBox, vcat, left, text, hsep, render)
 import Data.Aeson (
   FromJSON,
   ToJSON (toJSON),
@@ -23,50 +15,53 @@ import Data.Aeson (
   (.:),
   (.=),
  )
-import Data.Aeson.Schema ( Object, schema )
 import Data.Aeson.Types (parseJSON)
-import Data.ByteString.Char8 (strip)
-import Data.ByteString.Lazy qualified as B
-import Data.Text (Text)
-import GitHub.REST (
-  GitHubSettings (..),
-  KeyValue ((:=)),
-  MonadGitHubREST (..),
-  StdMethod (GET),
- )
-import GitHub.REST.Auth (Token (..))
-import GitHub.REST.Endpoint (GHEndpoint (..))
-import Data.List (transpose)
-import Helper.Util (renderTable)
+import Helper.Renderer (Rendered (..), Header (..))
+import Data.Maybe (fromMaybe)
 
-data Assignment = Assignment
-  { assignmentId :: Int
-  , assignmentTitle :: String
-  , assignmentInviteLink :: String
-  , assignmentSlug :: String
+data User = User
+  { userId :: Int
+  , userLogin :: String
   }
   deriving (Show)
 
-instance ToJSON Assignment where
-  toJSON (Assignment aid atitle alink aslug) =
+instance ToJSON User where
+  toJSON (User uid ulogin) =
     object
-      [ "id"          .= aid
-      , "title"       .= atitle
-      , "invite_link" .= alink
-      , "slug"        .= aslug
+      [ "id"       .= uid
+      , "login"    .= ulogin
       ]
 
-instance FromJSON Assignment where
-  parseJSON = withObject "Assignment" $ \obj ->
-    Assignment
+instance FromJSON User where
+  parseJSON = withObject "User" $ \obj ->
+    User
       <$> obj .: "id"
-      <*> obj .: "title"
-      <*> obj .: "invite_link"
-      <*> obj .: "slug"
+      <*> obj .: "login"
 
-renderAssignments :: [Assignment] -> String
-renderAssignments = renderTable ["ID", "Title", "Slug", "Invite link"] . map row
-  where row (Assignment aid atitle alink aslug) = [show aid, atitle, aslug, alink]
+data Repo = Repo
+  { repoId :: Int
+  , repoFullName :: String
+  , repoPrivate :: Bool
+  , repoDefaultBranch :: String
+  }
+  deriving (Show)
+
+instance ToJSON Repo where
+  toJSON (Repo rid rname rprivate rbranch) =
+    object
+      [ "id"             .= rid
+      , "full_name"      .= rname
+      , "private"        .= rprivate
+      , "default_branch" .= rbranch
+      ]
+
+instance FromJSON Repo where
+  parseJSON = withObject "Repo" $ \obj ->
+    Repo
+      <$> obj .: "id"
+      <*> obj .: "full_name"
+      <*> obj .: "private"
+      <*> obj .: "default_branch"
 
 data Classroom = Classroom
   { classroomId :: Int
@@ -93,64 +88,84 @@ instance FromJSON Classroom where
       <*> obj .: "archived"
       <*> obj .: "url"
 
-renderClassrooms :: [Classroom] -> String
-renderClassrooms = renderTable ["ID", "Name", "URL"] . map row
-  where row (Classroom cid cname _ curl) = [show cid, cname, curl]
+instance Rendered Classroom where
+  header = Header ["ID", "Name", "URL"]
+  row (Classroom cid cname _ curl) = [show cid, cname, curl]
 
-classrooms :: (MonadGitHubREST m) => m [Classroom]
-classrooms =
-  queryGitHub
-    GHEndpoint
-      { method = GET
-      , endpoint = "/classrooms"
-      , endpointVals = []
-      , ghData = []
-      }
-
-classroomAssignments :: (MonadGitHubREST m) => Int -> m [Assignment]
-classroomAssignments classroom =
-  queryGitHub
-    GHEndpoint
-      { method = GET
-      , endpoint = "/classrooms/:classroom/assignments"
-      , endpointVals =
-          [ "classroom" := classroom
-          ]
-      , ghData = []
-      }
-
-
-
-getToken = AccessToken . strip . B.toStrict <$> B.readFile ".github_token"
-
-defaultState token =
-  GitHubSettings
-    { token = token
-    , userAgent = "nsu-syspro"
-    , apiVersion = "2022-11-28"
-    }
-
-type ContentsSchema =
-  [schema|
-  {
-    content: Text,
+data Assignment = Assignment
+  { assignmentId :: Int
+  , assignmentTitle :: String
+  , assignmentInviteLink :: String
+  , assignmentSlug :: String
+  , assignmentClassroom :: Classroom
   }
-|]
+  deriving (Show)
 
-contentsEndpoint :: (MonadGitHubREST m) => Text -> Text -> Text -> Maybe Text -> m (Object ContentsSchema)
-contentsEndpoint owner repo path ref =
-  queryGitHub
-    GHEndpoint
-      { method = GET
-      , endpoint = "/repos/:owner/:repo/contents/:path"
-      , endpointVals =
-          [ "owner" := owner
-          , "repo"  := repo
-          , "path"  := path <> refStr
-          ]
-      , ghData = []
-      }
- where
-  refStr = case ref of
-    Just r -> "?ref=" <> r
-    Nothing -> ""
+instance ToJSON Assignment where
+  toJSON (Assignment aid atitle alink aslug aclassroom) =
+    object
+      [ "id"          .= aid
+      , "title"       .= atitle
+      , "invite_link" .= alink
+      , "slug"        .= aslug
+      , "classroom"   .= aclassroom
+      ]
+
+instance FromJSON Assignment where
+  parseJSON = withObject "Assignment" $ \obj ->
+    Assignment
+      <$> obj .: "id"
+      <*> obj .: "title"
+      <*> obj .: "invite_link"
+      <*> obj .: "slug"
+      <*> obj .: "classroom"
+
+instance Rendered Assignment where
+  header = Header ["ID", "Title", "Slug", "Invite link"]
+  row (Assignment aid atitle alink aslug _) = [show aid, atitle, aslug, alink]
+
+data AcceptedAssignment = AcceptedAssignment
+  { acceptedAssignmentId :: Int
+  , acceptedAssignmentSubmitted :: Bool
+  , acceptedAssignmentPassing :: Bool
+  , acceptedAssignmentGrade :: Maybe String
+  , acceptedAssignmentStudents :: [User]
+  , acceptedAssignmentRepository :: Repo
+  , acceptedAssignmentAssignment :: Assignment
+  }
+  deriving (Show)
+
+instance ToJSON AcceptedAssignment where
+  toJSON (AcceptedAssignment aid asubmitted apassing agrade astudents arepo aassignment) =
+    object
+      [ "id"          .= aid
+      , "submitted"   .= asubmitted
+      , "passing"     .= apassing
+      , "grade"       .= agrade
+      , "students"    .= astudents
+      , "repository"  .= arepo
+      , "assignment"  .= aassignment
+      ]
+
+instance FromJSON AcceptedAssignment where
+  parseJSON = withObject "AcceptedAssignment" $ \obj ->
+    AcceptedAssignment
+      <$> obj .: "id"
+      <*> obj .: "submitted"
+      <*> obj .: "passing"
+      <*> obj .: "grade"
+      <*> obj .: "students"
+      <*> obj .: "repository"
+      <*> obj .: "assignment"
+
+instance Rendered AcceptedAssignment where
+  header = Header ["ID", "Submitted", "Passing", "Grade", "Students", "Repo"]
+  row (AcceptedAssignment aid asubmitted apassing agrade astudents arepo _) =
+    [ show aid
+    , show asubmitted
+    , show apassing
+    , fromMaybe "" agrade
+    , unwords $ map userLogin astudents
+    , "https://github.com/" ++ repoFullName arepo
+    ]
+

@@ -19,64 +19,18 @@ import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
 import GHC.Generics (Generic)
 import GitHub.REST
+import Helper.GitHub.Endpoint (
+  runGH,
+  classroomAssignments,
+  classrooms, contentsEndpoint, acceptedAssignments,
+ )
 import Helper.GitHub (
   Classroom (classroomId),
-  classroomAssignments,
-  classrooms,
-  renderAssignments,
-  renderClassrooms,
  )
 import Helper.Util (parseAndExtractPointsFromSvg, safeReadFile)
 import Options.Applicative hiding (action)
 import Data.Text.Lazy.Encoding (decodeUtf8)
-
-getToken = (AccessToken . strip . B.toStrict <$>) <$> safeReadFile ".github_token"
-
-defaultState token =
-  GitHubSettings
-    { token = token
-    , userAgent = "nsu-syspro"
-    , apiVersion = "2022-11-28"
-    }
-
-
-type ContentsSchema =
-  [schema|
-  {
-    content: Text,
-  }
-|]
-
-contentsEndpoint :: (MonadGitHubREST m) => Text -> Text -> Text -> Maybe Text -> m (Object ContentsSchema)
-contentsEndpoint owner repo path ref =
-  queryGitHub
-    GHEndpoint
-      { method = GET
-      , endpoint = "/repos/:owner/:repo/contents/:path"
-      , endpointVals =
-          [ "owner" := owner
-          , "repo" := repo
-          , "path" := path <> refStr
-          ]
-      , ghData = []
-      }
- where
-  refStr = case ref of
-    Just r -> "?ref=" <> r
-    Nothing -> ""
-
-main' :: IO ()
-main' = do
-  name <- execParser $ info (argument str (metavar "NAME")) fullDesc
-  token <- getToken
-  res <-
-    runGitHubT (defaultState token) $
-      contentsEndpoint
-        "nsu-syspro"
-        ("mpt-markup-basics-" <> name)
-        ".github/badges/points-bar.svg"
-        (Just "badges")
-  print $ parseAndExtractPointsFromSvg $ decodeLenient $ B.fromStrict $ encodeUtf8 [get| res.content |]
+import Helper.Renderer (renderTable)
 
 main :: IO ()
 main = join $ execParser $ info (helper <*> opts)
@@ -89,20 +43,33 @@ opts = subparser
   ( command "classrooms" (info (pure classroomsCommand) $
     progDesc "List available classrooms" )
  <> command "assignments" (info (assignmentsCommand <$> argument auto (metavar "CLASSROOM_ID")) $
-    progDesc "List available assignments in classroom with specified CLASSROOM_ID") )
-
-runGH :: GitHubT IO a -> IO a
-runGH action = do
-  token <- getToken
-  runGitHubT (defaultState token) action
+    progDesc "List available assignments in classroom with specified CLASSROOM_ID")
+ <> command "accepted" (info (acceptedAssignmentsCommand <$> argument auto (metavar "ASSIGNMENT_ID")) $
+    progDesc "List accepted assignments of assignment with specified ASSIGNMENT_ID") )
 
 classroomsCommand :: IO ()
 classroomsCommand = do
   classroom <- runGH classrooms
-  putStr $ renderClassrooms classroom
+  putStr $ renderTable classroom
 
 assignmentsCommand :: Int -> IO ()
 assignmentsCommand cid = do
   assignment <- runGH $ classroomAssignments cid
-  putStr $ renderAssignments assignment
+  putStr $ renderTable assignment
 
+acceptedAssignmentsCommand :: Int -> IO ()
+acceptedAssignmentsCommand aid = do
+  assignment <- runGH $ acceptedAssignments aid
+  putStr $ renderTable assignment
+
+main' :: IO ()
+main' = do
+  name <- execParser $ info (argument str (metavar "NAME")) fullDesc
+  res <-
+    runGH $
+      contentsEndpoint
+        "nsu-syspro"
+        ("mpt-markup-basics-" <> name)
+        ".github/badges/points-bar.svg"
+        (Just "badges")
+  print $ parseAndExtractPointsFromSvg $ decodeLenient $ B.fromStrict $ encodeUtf8 [get| res.content |]

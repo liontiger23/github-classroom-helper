@@ -27,6 +27,8 @@ library
   exposed-modules:
       Helper
       Helper.GitHub
+      Helper.GitHub.Endpoint
+      Helper.Renderer
       Helper.Util
   other-modules:
       Paths_github_classroom_helper
