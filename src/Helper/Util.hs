@@ -24,11 +24,11 @@ safeReadFile f = (Just <$> B.readFile f) `catch` handler
     handler _ = pure Nothing
 
 renderTable :: [String] -> (a -> [String]) -> [a] -> String
-renderTable header row xs = renderTable_ (header : map row xs)
+renderTable header row xs = renderTable_ header $ map row xs
 
-renderTable_ :: [[String]] -> String
-renderTable_ table =
+renderTable_ :: [String] -> [[String]] -> String
+renderTable_ header rows =
   render
     $ hsep 2 Boxes.left
     $ map (vcat Boxes.left . map Boxes.text)
-    $ transpose table
+    $ transpose (header : rows)

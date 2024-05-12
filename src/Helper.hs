@@ -14,10 +14,14 @@ import Helper.GitHub.Endpoint (
   acceptedAssignments,
   classroomAssignments,
   classrooms,
+  pullRequestReviews,
   runGH,
  )
-import Helper.Util (renderTable)
+import Helper.Util (renderTable, renderTable_)
 import Options.Applicative hiding (action)
+import GitHub.REST (MonadGitHubREST)
+import Data.List.Split (splitOn)
+import GitHub.REST.Monad (GitHubT)
 
 main :: IO ()
 main = join $ execParser $ info (helper <*> opts)
@@ -31,6 +35,8 @@ opts = subparser
     progDesc "List available classrooms" )
  <> command "assignments" (info (assignmentsCommand <$> argument auto (metavar "CLASSROOM_ID")) $
     progDesc "List available assignments in classroom with specified CLASSROOM_ID")
+ <> command "accepted-all" (info (allAcceptedAssignmentsCommand <$> argument auto (metavar "CLASSROOM_ID")) $
+    progDesc "List accepted assignments of assignment with specified CLASSROOM_ID")
  <> command "accepted" (info (acceptedAssignmentsCommand <$> argument auto (metavar "ASSIGNMENT_ID")) $
     progDesc "List accepted assignments of assignment with specified ASSIGNMENT_ID") )
 
@@ -58,15 +64,35 @@ assignmentsCommand cid = runGH (classroomAssignments cid)
     ]
 
 acceptedAssignmentsCommand :: Int -> IO ()
-acceptedAssignmentsCommand aid = runGH (acceptedAssignments aid)
-  >>= putStr . renderTable ["ID", "Submitted", "Passing", "Grade", "Students", "Repo"] row
+acceptedAssignmentsCommand aid = acceptedAssignmentsCommand' $ acceptedAssignments aid
+
+allAcceptedAssignmentsCommand :: Int -> IO ()
+allAcceptedAssignmentsCommand cid = acceptedAssignmentsCommand' $
+  classroomAssignments cid >>= \as -> concat <$> mapM (\a -> acceptedAssignments [get| a.id |]) as
+
+acceptedAssignmentsCommand' :: GitHubT IO [AcceptedAssignment] -> IO ()
+acceptedAssignmentsCommand' assignmentsM = runGH process
+  >>= putStr . renderTable_ ["Students", "Grade", "Review", "Repo"]
  where
-  row :: AcceptedAssignment -> [String]
-  row x =
-    [ show [get| x.id |]
-    , show [get| x.submitted |]
-    , show [get| x.passing |]
-    , fromMaybe "" [get| x.grade |]
-    , unwords [get| x.students[].login |]
-    , "https://github.com/" ++ [get| x.repository.full_name |]
-    ]
+  process :: GitHubT IO [[String]]
+  process = do
+    assignments <- assignmentsM
+    reviews <- mapM passedReview assignments
+    pure $ do
+      (a, r) <- zip assignments reviews
+      pure
+        [ unwords [get| a.students[].login |]
+        , fromMaybe "" [get| a.grade |]
+        , if r then "Passed" else ""
+        , "https://github.com/" ++ [get| a.repository.full_name |]
+        ]
+  passedReview :: (MonadGitHubREST m) => AcceptedAssignment -> m Bool
+  passedReview assignment = do
+    reviews <- pullRequestReviews owner repo 1
+    let r = last reviews
+    pure $ not (null reviews) && [get| r.state |] == "APPROVED"
+   where
+    repoFullName = [get| assignment.repository.full_name |]
+    (owner, repo) = case splitOn "/" repoFullName of
+      [x, y] -> (x, y)
+      _ -> error $ "Unexpected repository name " ++ repoFullName

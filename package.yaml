@@ -24,6 +24,7 @@ dependencies:
   - bytestring
   - github-rest
   - aeson-schemas
+  - split
   - boxes
   - optparse-applicative
 

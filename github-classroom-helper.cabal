@@ -41,6 +41,7 @@ library
     , bytestring
     , github-rest
     , optparse-applicative
+    , split
   default-language: Haskell2010
 
 executable github-classroom-helper-exe
@@ -58,6 +59,7 @@ executable github-classroom-helper-exe
     , github-classroom-helper
     , github-rest
     , optparse-applicative
+    , split
   default-language: Haskell2010
 
 test-suite github-classroom-helper-test
@@ -76,6 +78,7 @@ test-suite github-classroom-helper-test
     , github-classroom-helper
     , github-rest
     , optparse-applicative
+    , split
     , tasty
     , tasty-hunit
   default-language: Haskell2010

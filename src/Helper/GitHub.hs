@@ -5,6 +5,7 @@ module Helper.GitHub (
   Assignment,
   Classroom,
   AcceptedAssignment,
+  Review,
   get,
 ) where
 
@@ -13,6 +14,15 @@ import Data.Aeson.Schema (Object, schema, get)
 type User = Object [schema|
   {
     id: Int,
+    login: String,
+    name: String,
+    avatar_url: String,
+    html_url: String,
+  }
+|]
+
+type UserLogin = Object [schema|
+  {
     login: String,
   }
 |]
@@ -51,9 +61,18 @@ type AcceptedAssignment = Object [schema|
     submitted: Bool,
     passing: Bool,
     grade: Maybe String,
-    students: List User,
+    students: List UserLogin,
     repository: Repo,
     assignment: Assignment,
+  }
+|]
+
+type Review = Object [schema|
+  {
+    id: Int,
+    user: UserLogin,
+    body: String,
+    state: String,
   }
 |]
 
