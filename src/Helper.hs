@@ -8,18 +8,16 @@
 module Helper (main) where
 
 import Control.Monad (join)
-import Data.Aeson.Schema (get)
-import Data.ByteString.Base64.Lazy (decodeLenient)
-import Data.ByteString.Lazy qualified as B
-import Data.Text.Encoding (encodeUtf8)
+import Data.Maybe (fromMaybe)
+import Helper.GitHub (AcceptedAssignment, Assignment, Classroom, get)
 import Helper.GitHub.Endpoint (
-  runGH,
+  acceptedAssignments,
   classroomAssignments,
-  classrooms, contentsEndpoint, acceptedAssignments,
+  classrooms,
+  runGH,
  )
-import Helper.Util (parseAndExtractPointsFromSvg)
+import Helper.Util (renderTable)
 import Options.Applicative hiding (action)
-import Helper.Renderer (renderTable)
 
 main :: IO ()
 main = join $ execParser $ info (helper <*> opts)
@@ -38,24 +36,37 @@ opts = subparser
 
 classroomsCommand :: IO ()
 classroomsCommand = runGH classrooms
-  >>= putStr . renderTable
+  >>= putStr . renderTable ["ID", "NAME", "URL"] row
+ where
+   row :: Classroom -> [String]
+   row x =
+    [ show [get| x.id |]
+    , [get| x.name |]
+    , [get| x.url |]
+    ]
 
 assignmentsCommand :: Int -> IO ()
 assignmentsCommand cid = runGH (classroomAssignments cid)
-  >>= putStr . renderTable
+  >>= putStr . renderTable ["ID", "Title", "Slug", "Invite link"] row
+ where
+  row :: Assignment -> [String]
+  row x =
+    [ show [get| x.id |]
+    , [get| x.title |]
+    , [get| x.slug |]
+    , [get| x.invite_link |]
+    ]
 
 acceptedAssignmentsCommand :: Int -> IO ()
 acceptedAssignmentsCommand aid = runGH (acceptedAssignments aid)
-  >>= putStr . renderTable
-
-main' :: IO ()
-main' = do
-  name <- execParser $ info (argument str (metavar "NAME")) fullDesc
-  res <-
-    runGH $
-      contentsEndpoint
-        "nsu-syspro"
-        ("mpt-markup-basics-" <> name)
-        ".github/badges/points-bar.svg"
-        (Just "badges")
-  print $ parseAndExtractPointsFromSvg $ decodeLenient $ B.fromStrict $ encodeUtf8 [get| res.content |]
+  >>= putStr . renderTable ["ID", "Submitted", "Passing", "Grade", "Students", "Repo"] row
+ where
+  row :: AcceptedAssignment -> [String]
+  row x =
+    [ show [get| x.id |]
+    , show [get| x.submitted |]
+    , show [get| x.passing |]
+    , fromMaybe "" [get| x.grade |]
+    , unwords [get| x.students[].login |]
+    , "https://github.com/" ++ [get| x.repository.full_name |]
+    ]

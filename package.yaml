@@ -21,15 +21,10 @@ description:         Please see the README on GitHub at <https://github.com/lion
 
 dependencies:
   - base >= 4.7 && < 5
-  - text
   - bytestring
-  - base64-bytestring
   - github-rest
-  - aeson
   - aeson-schemas
-  - yaml
   - boxes
-  - xml-conduit
   - optparse-applicative
 
 ghc-options:
