@@ -35,10 +35,13 @@ library
       src
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
-      aeson-schemas
+      aeson
+    , aeson-schemas
     , base >=4.7 && <5
     , boxes
     , bytestring
+    , doclayout
+    , doctemplates
     , github-rest
     , optparse-applicative
     , split
@@ -52,10 +55,13 @@ executable github-classroom-helper-exe
       app
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      aeson-schemas
+      aeson
+    , aeson-schemas
     , base >=4.7 && <5
     , boxes
     , bytestring
+    , doclayout
+    , doctemplates
     , github-classroom-helper
     , github-rest
     , optparse-applicative
@@ -71,10 +77,13 @@ test-suite github-classroom-helper-test
       test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      aeson-schemas
+      aeson
+    , aeson-schemas
     , base >=4.7 && <5
     , boxes
     , bytestring
+    , doclayout
+    , doctemplates
     , github-classroom-helper
     , github-rest
     , optparse-applicative

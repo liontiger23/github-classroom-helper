@@ -1,0 +1,5 @@
+| Student | $for(assignments)$$assignments.title$ | Review$sep$ | $endfor$ |
+|---------|$for(assignments)$----|----$sep$|$endfor$|
+$for(students)$
+| $students.name$ | $for(students.results)$$students.results$ | ✅$sep$ | $endfor$ |
+$endfor$

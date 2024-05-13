@@ -22,6 +22,9 @@ import Options.Applicative hiding (action)
 import GitHub.REST (MonadGitHubREST)
 import Data.List.Split (splitOn)
 import GitHub.REST.Monad (GitHubT)
+import Text.DocTemplates
+import Data.Aeson
+import Text.DocLayout (render)
 
 main :: IO ()
 main = join $ execParser $ info (helper <*> opts)
@@ -38,7 +41,11 @@ opts = subparser
  <> command "accepted-all" (info (allAcceptedAssignmentsCommand <$> argument auto (metavar "CLASSROOM_ID")) $
     progDesc "List accepted assignments of assignment with specified CLASSROOM_ID")
  <> command "accepted" (info (acceptedAssignmentsCommand <$> argument auto (metavar "ASSIGNMENT_ID")) $
-    progDesc "List accepted assignments of assignment with specified ASSIGNMENT_ID") )
+    progDesc "List accepted assignments of assignment with specified ASSIGNMENT_ID")
+ <> command "report" (info ( reportCommand
+                         <$> argument auto (metavar "CLASSROOM_ID")
+                         <*> argument str  (metavar "TEMPLATE_FILE") ) $
+    progDesc "List accepted assignments of assignment with specified CLASSROOM_ID") )
 
 classroomsCommand :: IO ()
 classroomsCommand = runGH classrooms
@@ -83,7 +90,7 @@ acceptedAssignmentsCommand' assignmentsM = runGH process
       pure
         [ unwords [get| a.students[].login |]
         , fromMaybe "" [get| a.grade |]
-        , if r then "Passed" else ""
+        , if r then "✅" else "❌"
         , "https://github.com/" ++ [get| a.repository.full_name |]
         ]
   passedReview :: (MonadGitHubREST m) => AcceptedAssignment -> m Bool
@@ -96,3 +103,23 @@ acceptedAssignmentsCommand' assignmentsM = runGH process
     (owner, repo) = case splitOn "/" repoFullName of
       [x, y] -> (x, y)
       _ -> error $ "Unexpected repository name " ++ repoFullName
+
+reportCommand :: Int -> FilePath -> IO ()
+reportCommand cid templateFile = do
+  -- TODO
+  t <- either error id <$> compileTemplateFile templateFile
+  putStrLn $ render Nothing $ renderTemplate t $ object
+    [ "assignments" .=
+      [ object ["title" .= ("foo" :: String)]
+      , object ["title" .= ("bar" :: String)]
+      ]
+    , "students" .=
+      [ object
+        [ "name" .= ("John" :: String)
+        , "results" .= (["0/10", "8/10"] :: [String])
+        ]
+      ]
+    ]
+ --where
+  -- TODO
+  --fetchData :: GitHubT IO ([Assignment], [
