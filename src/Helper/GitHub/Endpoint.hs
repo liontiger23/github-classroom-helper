@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 module Helper.GitHub.Endpoint (
   runGH,
@@ -8,6 +9,7 @@ module Helper.GitHub.Endpoint (
   classroomAssignments,
   acceptedAssignments,
   pullRequestReviews,
+  contentsEndpoint,
 ) where
 
 import Data.ByteString.Char8 (strip)
@@ -24,6 +26,8 @@ import GitHub.REST.Endpoint (GHEndpoint (..))
 import GitHub.REST.Monad (GitHubT)
 import Helper.GitHub
 import Helper.Util (safeReadFile)
+import Data.Aeson.Schema (Object, schema)
+import Data.Text (Text)
 
 runGH :: GitHubT IO a -> IO a
 runGH action = do
@@ -83,3 +87,28 @@ pullRequestReviews owner repo pr =
           ]
       , ghData = []
       }
+
+type ContentsSchema = Object [schema|
+  {
+    content: Text,
+  }
+|]
+
+contentsEndpoint :: (MonadGitHubREST m) => Text -> Text -> Text -> Maybe Text -> m ContentsSchema
+contentsEndpoint owner repo path ref =
+  queryGitHub
+    GHEndpoint
+      { method = GET
+      , endpoint = "/repos/:owner/:repo/contents/:path"
+      , endpointVals =
+          [ "owner" := owner
+          , "repo"  := repo
+          , "path"  := path <> refStr
+          ]
+      , ghData = []
+      }
+ where
+  refStr = case ref of
+    Just r -> "?ref=" <> r
+    Nothing -> ""
+

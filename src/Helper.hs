@@ -16,11 +16,11 @@ import Helper.GitHub.Endpoint (
   classroomAssignments,
   classrooms,
   pullRequestReviews,
-  runGH,
+  runGH, contentsEndpoint,
  )
-import Helper.Util (renderTable, renderTable_)
+import Helper.Util (renderTable, renderTable_, parseAndExtractPointsFromSvg)
 import Options.Applicative hiding (action)
-import GitHub.REST (MonadGitHubREST)
+import GitHub.REST (MonadGitHubREST, githubTry')
 import Data.List.Split (splitOn)
 import GitHub.REST.Monad (GitHubT)
 import Text.DocTemplates
@@ -29,6 +29,12 @@ import Text.DocLayout (render)
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.List (nub)
+import Data.ByteString.Base64.Lazy (decodeLenient)
+import Data.ByteString.Lazy qualified as B
+import Data.Text.Encoding (encodeUtf8)
+import Data.Text (pack)
+import Network.HTTP.Types (status404)
+import Control.Monad.IO.Unlift (MonadUnliftIO)
 
 main :: IO ()
 main = join $ execParser $ info (helper <*> opts)
@@ -144,15 +150,23 @@ reportCommand cid templateFile = do
       ]
 
 
-assignmentReport :: (MonadGitHubREST m) => [AcceptedAssignment] -> m AssignmentReport
+assignmentReport :: (MonadGitHubREST m, MonadUnliftIO m) => [AcceptedAssignment] -> m AssignmentReport
 assignmentReport xs = AssignmentReport . Map.fromList <$> mapM toMapPair xs
  where
-  toMapPair :: (MonadGitHubREST m) => AcceptedAssignment -> m (RepoName, AssignmentStatus)
+  toMapPair :: (MonadGitHubREST m, MonadUnliftIO m) => AcceptedAssignment -> m (RepoName, AssignmentStatus)
   toMapPair a = (snd $ assignmentRepoParts a,) <$> assignmentStatus a
 
-assignmentStatus :: (MonadGitHubREST m) => AcceptedAssignment -> m AssignmentStatus
-assignmentStatus assignment = AssignmentStatus grade <$> passedReview assignment
- where grade = fromMaybe "" [get| assignment.grade |]
+assignmentStatus :: (MonadGitHubREST m, MonadUnliftIO m) => AcceptedAssignment -> m AssignmentStatus
+assignmentStatus assignment = do
+  review <- passedReview assignment
+  grade <- case [get| assignment.grade |] of
+    Just g -> pure $ Just g
+    Nothing -> do
+      res <- githubTry' status404 $ svgPoints assignment
+      pure $ case res of 
+        Right g -> g
+        Left e -> Nothing
+  pure $ AssignmentStatus (fromMaybe "" grade) review
 
 passedReview :: (MonadGitHubREST m) => AcceptedAssignment -> m Bool
 passedReview assignment = do
@@ -177,3 +191,13 @@ data AssignmentStatus = AssignmentStatus Grade Bool
   deriving (Eq, Show)
 newtype AssignmentReport = AssignmentReport (Map RepoName AssignmentStatus)
 
+svgPoints :: (MonadGitHubREST m) => AcceptedAssignment -> m (Maybe String)
+svgPoints assignment = do
+  res <- contentsEndpoint
+        "nsu-syspro"
+        (pack $ snd $ repoParts [get| assignment.repository.full_name |])
+        ".github/badges/points-bar.svg"
+        (Just "badges")
+  pure $ case parseAndExtractPointsFromSvg $ decodeLenient $ B.fromStrict $ encodeUtf8 [get| res.content |] of
+    Right r -> Just r
+    Left e -> Just e

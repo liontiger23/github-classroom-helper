@@ -1,9 +1,11 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 
 module Helper.Util (
   safeReadFile,
   renderTable,
   renderTable_,
+  parseAndExtractPointsFromSvg,
 ) where
 
 import Control.Exception (IOException)
@@ -16,6 +18,11 @@ import Text.PrettyPrint.Boxes (
   vcat,
  )
 import Text.PrettyPrint.Boxes qualified as Boxes
+import Text.XML
+import Control.Arrow (left)
+import Text.XML.Cursor
+import Data.Text.Read (decimal)
+import Data.Text (unpack)
 
 safeReadFile :: FilePath -> IO (Maybe B.ByteString)
 safeReadFile f = (Just <$> B.readFile f) `catch` handler
@@ -32,3 +39,17 @@ renderTable_ header rows =
     $ hsep 2 Boxes.left
     $ map (vcat Boxes.left . map Boxes.text)
     $ transpose (header : rows)
+
+parseAndExtractPointsFromSvg :: B.ByteString -> Either String String
+parseAndExtractPointsFromSvg svg = do
+  doc <- left show $ parseLBS def svg
+  case extractPointsFromSvg doc of
+    [] -> Left "No points extracted"
+    --[res] -> Right res
+    (_:x:_) -> Right x
+    --_ -> Left "Too many points extracted"
+
+extractPointsFromSvg :: Document -> [String]
+extractPointsFromSvg doc = do
+   t <- fromDocument doc $// laxElement "text" &/ content
+   pure $ unpack t

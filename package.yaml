@@ -21,6 +21,12 @@ description:         Please see the README on GitHub at <https://github.com/lion
 
 dependencies:
   - base >= 4.7 && < 5
+  - text
+  - base64-bytestring
+  - yaml
+  - xml-conduit
+  - http-types
+  - unliftio-core
   - bytestring
   - github-rest
   - aeson
