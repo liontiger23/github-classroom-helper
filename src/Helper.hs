@@ -4,12 +4,13 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TupleSections #-}
 
 module Helper (main) where
 
 import Control.Monad (join)
 import Data.Maybe (fromMaybe)
-import Helper.GitHub (AcceptedAssignment, Assignment, Classroom, get)
+import Helper.GitHub (AcceptedAssignment, Assignment, Classroom, get, User)
 import Helper.GitHub.Endpoint (
   acceptedAssignments,
   classroomAssignments,
@@ -25,6 +26,9 @@ import GitHub.REST.Monad (GitHubT)
 import Text.DocTemplates
 import Data.Aeson
 import Text.DocLayout (render)
+import Data.Map (Map)
+import Data.Map qualified as Map
+import Data.List (nub)
 
 main :: IO ()
 main = join $ execParser $ info (helper <*> opts)
@@ -75,7 +79,7 @@ acceptedAssignmentsCommand aid = acceptedAssignmentsCommand' $ acceptedAssignmen
 
 allAcceptedAssignmentsCommand :: Int -> IO ()
 allAcceptedAssignmentsCommand cid = acceptedAssignmentsCommand' $
-  classroomAssignments cid >>= \as -> concat <$> mapM (\a -> acceptedAssignments [get| a.id |]) as
+  classroomAssignments cid >>= \as -> concat <$> mapM (acceptedAssignments . [get| .id |]) as
 
 acceptedAssignmentsCommand' :: GitHubT IO [AcceptedAssignment] -> IO ()
 acceptedAssignmentsCommand' assignmentsM = runGH process
@@ -93,33 +97,83 @@ acceptedAssignmentsCommand' assignmentsM = runGH process
         , if r then "✅" else "❌"
         , "https://github.com/" ++ [get| a.repository.full_name |]
         ]
-  passedReview :: (MonadGitHubREST m) => AcceptedAssignment -> m Bool
-  passedReview assignment = do
-    reviews <- pullRequestReviews owner repo 1
-    let r = last reviews
-    pure $ not (null reviews) && [get| r.state |] == "APPROVED"
-   where
-    repoFullName = [get| assignment.repository.full_name |]
-    (owner, repo) = case splitOn "/" repoFullName of
-      [x, y] -> (x, y)
-      _ -> error $ "Unexpected repository name " ++ repoFullName
 
 reportCommand :: Int -> FilePath -> IO ()
 reportCommand cid templateFile = do
-  -- TODO
+  (assignments, users, AssignmentReport reportData) <- runGH fetchData
   t <- either error id <$> compileTemplateFile templateFile
   putStrLn $ render Nothing $ renderTemplate t $ object
-    [ "assignments" .=
-      [ object ["title" .= ("foo" :: String)]
-      , object ["title" .= ("bar" :: String)]
-      ]
+    [ "assignments" .= assignments
     , "students" .=
-      [ object
-        [ "name" .= ("John" :: String)
-        , "results" .= (["0/10", "8/10"] :: [String])
-        ]
-      ]
+      let
+        result :: User -> Assignment -> Maybe Value
+        result u a = fmap fromStatus (Map.lookup key reportData)
+         where key = [get| a.slug |] ++ "-" ++ [get| u.login |]
+        fromStatus :: AssignmentStatus -> Value
+        fromStatus (AssignmentStatus g r) = object
+          [ "grade"  .= g
+          , "review" .= (if r then "✅" else "❌" :: String)
+          ]
+        student :: User -> Value
+        student u = object
+            [ "name"    .= [get| u.name |]
+            , "login"   .= [get| u.login |]
+            , "results" .= map (result u) assignments
+            ]
+      in map student users
     ]
- --where
-  -- TODO
-  --fetchData :: GitHubT IO ([Assignment], [
+ where
+  fetchData :: GitHubT IO ([Assignment], [User], AssignmentReport)
+  fetchData = do
+    assignments <- classroomAssignments cid
+    accepted <- concat <$> mapM (acceptedAssignments . [get| .id |]) assignments
+    let users = nub $ map fakeUser $ concatMap [get| .students[].login |] accepted
+    report <- assignmentReport accepted
+    pure (assignments, users, report)
+  fakeUser :: String -> User
+  fakeUser login = case fromJSON val of
+    Data.Aeson.Success x -> x
+    Data.Aeson.Error e -> error e
+   where
+    val = object
+      [ "id"     .= (42 :: Int)
+      , "login" .= login
+      , "name"  .= login
+      , "avatar_url" .= ("" :: String)
+      , "html_url" .= ("" :: String)
+      ]
+
+
+assignmentReport :: (MonadGitHubREST m) => [AcceptedAssignment] -> m AssignmentReport
+assignmentReport xs = AssignmentReport . Map.fromList <$> mapM toMapPair xs
+ where
+  toMapPair :: (MonadGitHubREST m) => AcceptedAssignment -> m (RepoName, AssignmentStatus)
+  toMapPair a = (snd $ assignmentRepoParts a,) <$> assignmentStatus a
+
+assignmentStatus :: (MonadGitHubREST m) => AcceptedAssignment -> m AssignmentStatus
+assignmentStatus assignment = AssignmentStatus grade <$> passedReview assignment
+ where grade = fromMaybe "" [get| assignment.grade |]
+
+passedReview :: (MonadGitHubREST m) => AcceptedAssignment -> m Bool
+passedReview assignment = do
+  reviews <- pullRequestReviews owner repo 1
+  let r = last reviews
+  pure $ not (null reviews) && [get| r.state |] == "APPROVED"
+ where
+  (owner, repo) = assignmentRepoParts assignment
+
+assignmentRepoParts :: AcceptedAssignment -> (OwnerName, RepoName)
+assignmentRepoParts a = repoParts [get| a.repository.full_name |]
+
+repoParts :: String -> (OwnerName, RepoName)
+repoParts name = case splitOn "/" name of
+  [x, y] -> (x, y)
+  _ -> error $ "Unexpected repository name " ++ name
+
+type OwnerName = String
+type RepoName = String
+type Grade = String
+data AssignmentStatus = AssignmentStatus Grade Bool
+  deriving (Eq, Show)
+newtype AssignmentReport = AssignmentReport (Map RepoName AssignmentStatus)
+

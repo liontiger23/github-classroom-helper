@@ -1,5 +1,5 @@
-| Student | $for(assignments)$$assignments.title$ | Review$sep$ | $endfor$ |
-|---------|$for(assignments)$----|----$sep$|$endfor$|
+| Student | $for(assignments)$$assignments.title$$sep$ | $endfor$ |
+|---------|$for(assignments)$----$sep$|$endfor$|
 $for(students)$
-| $students.name$ | $for(students.results)$$students.results$ | ✅$sep$ | $endfor$ |
+| $students.name$ | $for(students.results)$$if(students.results)$$students.results.review$ $students.results.grade$$endif$$sep$ | $endfor$ |
 $endfor$

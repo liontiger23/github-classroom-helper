@@ -27,6 +27,7 @@ dependencies:
   - aeson-schemas
   - split
   - boxes
+  - containers
   - doctemplates
   - doclayout
   - optparse-applicative

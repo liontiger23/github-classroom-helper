@@ -6,6 +6,7 @@ module Helper.GitHub (
   Classroom,
   AcceptedAssignment,
   Review,
+  User,
   get,
 ) where
 
