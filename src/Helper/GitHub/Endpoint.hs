@@ -1,10 +1,8 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
 module Helper.GitHub.Endpoint (
-  runGH,
   classrooms,
   classroomAssignments,
   acceptedAssignments,
@@ -12,33 +10,15 @@ module Helper.GitHub.Endpoint (
   contentsEndpoint,
 ) where
 
-import Data.ByteString.Char8 (strip)
-import Data.ByteString.Lazy qualified as B
 import GitHub.REST (
-  GitHubSettings (..),
   KeyValue ((:=)),
   MonadGitHubREST (..),
   StdMethod (GET),
-  runGitHubT,
  )
-import GitHub.REST.Auth (Token (..))
 import GitHub.REST.Endpoint (GHEndpoint (..))
-import GitHub.REST.Monad (GitHubT)
 import Helper.GitHub
-import Helper.Util (safeReadFile)
 import Data.Aeson.Schema (Object, schema)
 import Data.Text (Text)
-
-runGH :: GitHubT IO a -> IO a
-runGH action = do
-  tokenString <- safeReadFile ".github_token"
-  let settings =
-        GitHubSettings
-          { token = AccessToken . strip . B.toStrict <$> tokenString
-          , userAgent = ""
-          , apiVersion = "2022-11-28"
-          }
-  runGitHubT settings action
 
 classrooms :: (MonadGitHubREST m) => m [Classroom]
 classrooms =

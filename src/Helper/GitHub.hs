@@ -1,4 +1,6 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
 module Helper.GitHub (
@@ -8,9 +10,22 @@ module Helper.GitHub (
   Review,
   User,
   get,
+  readGHSettings,
+  runGitHubT,
+  runGitHubT',
 ) where
 
 import Data.Aeson.Schema (Object, schema, get)
+import Data.ByteString.Char8 (strip)
+import Data.ByteString.Lazy qualified as B
+import GitHub.REST (
+  GitHubSettings (..), runGitHubT,
+ )
+import GitHub.REST.Auth (Token (..))
+import Helper.Util (safeReadFile)
+import Control.Monad.IO.Unlift (MonadIO)
+import GitHub.REST.Monad (GitHubT)
+
 
 type User = Object [schema|
   {
@@ -77,3 +92,14 @@ type Review = Object [schema|
   }
 |]
 
+runGitHubT' :: MonadIO m => GitHubT m a -> GitHubSettings -> m a
+runGitHubT' = flip runGitHubT
+
+readGHSettings :: IO GitHubSettings
+readGHSettings = do
+  tokenString <- safeReadFile ".github_token"
+  pure GitHubSettings
+    { token = AccessToken . strip . B.toStrict <$> tokenString
+    , userAgent = ""
+    , apiVersion = "2022-11-28"
+    }
