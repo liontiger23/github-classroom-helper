@@ -10,7 +10,7 @@ module Helper (main) where
 
 import Control.Monad (join)
 import Data.Maybe (fromMaybe)
-import Helper.GitHub (AcceptedAssignment, Assignment, Classroom, get, User, runGH, mapGHConcurrently, withGHSettings)
+import Helper.GitHub (runGH, mapGHConcurrently, withGHSettings)
 import Helper.GitHub.Endpoint (
   acceptedAssignments,
   classroomAssignments,
@@ -18,6 +18,7 @@ import Helper.GitHub.Endpoint (
   pullRequestReviews,
   contentsEndpoint,
  )
+import Helper.GitHub.Schemas (AcceptedAssignment, Assignment, Classroom, get, User)
 import Helper.Util (renderTable, renderTable_, parseAndExtractPointsFromSvg)
 import Options.Applicative hiding (action)
 import GitHub.REST (MonadGitHubREST, githubTry')

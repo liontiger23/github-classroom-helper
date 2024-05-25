@@ -16,7 +16,7 @@ import GitHub.REST (
   StdMethod (GET),
  )
 import GitHub.REST.Endpoint (GHEndpoint (..))
-import Helper.GitHub
+import Helper.GitHub.Schemas
 import Data.Aeson.Schema (Object, schema)
 import Data.Text (Text)
 
