@@ -37,6 +37,7 @@ library
   build-depends:
       aeson
     , aeson-schemas
+    , async
     , base >=4.7 && <5
     , base64-bytestring
     , boxes
@@ -64,6 +65,7 @@ executable github-classroom-helper-exe
   build-depends:
       aeson
     , aeson-schemas
+    , async
     , base >=4.7 && <5
     , base64-bytestring
     , boxes
@@ -93,6 +95,7 @@ test-suite github-classroom-helper-test
   build-depends:
       aeson
     , aeson-schemas
+    , async
     , base >=4.7 && <5
     , base64-bytestring
     , boxes

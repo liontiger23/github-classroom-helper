@@ -22,7 +22,6 @@ import Helper.Util (renderTable, renderTable_, parseAndExtractPointsFromSvg)
 import Options.Applicative hiding (action)
 import GitHub.REST (MonadGitHubREST, githubTry')
 import Data.List.Split (splitOn)
-import GitHub.REST.Monad (GitHubT)
 import Text.DocTemplates
 import Data.Aeson
 import Text.DocLayout (render)
@@ -35,6 +34,7 @@ import Data.Text.Encoding (encodeUtf8)
 import Data.Text (pack)
 import Network.HTTP.Types (status404)
 import Control.Monad.IO.Unlift (MonadUnliftIO)
+import Control.Concurrent.Async (mapConcurrently)
 
 main :: IO ()
 main = join $ execParser $ info (helper <*> opts)
@@ -81,20 +81,20 @@ assignmentsCommand cid = runGH (classroomAssignments cid)
     ]
 
 acceptedAssignmentsCommand :: Int -> IO ()
-acceptedAssignmentsCommand aid = acceptedAssignmentsCommand' $ acceptedAssignments aid
+acceptedAssignmentsCommand aid = acceptedAssignmentsCommand' $ runGH $ acceptedAssignments aid
 
 allAcceptedAssignmentsCommand :: Int -> IO ()
 allAcceptedAssignmentsCommand cid = acceptedAssignmentsCommand' $
-  classroomAssignments cid >>= \as -> concat <$> mapM (acceptedAssignments . [get| .id |]) as
+  runGH (classroomAssignments cid) >>= \as -> concat <$> mapConcurrently (runGH . acceptedAssignments . [get| .id |]) as
 
-acceptedAssignmentsCommand' :: GitHubT IO [AcceptedAssignment] -> IO ()
-acceptedAssignmentsCommand' assignmentsM = runGH process
+acceptedAssignmentsCommand' :: IO [AcceptedAssignment] -> IO ()
+acceptedAssignmentsCommand' assignmentsM = process
   >>= putStr . renderTable_ ["Students", "Grade", "Review", "Repo"]
  where
-  process :: GitHubT IO [[String]]
+  process :: IO [[String]]
   process = do
     assignments <- assignmentsM
-    reviews <- mapM passedReview assignments
+    reviews <- mapConcurrently (runGH . passedReview) assignments
     pure $ do
       (a, r) <- zip assignments reviews
       pure
@@ -106,7 +106,7 @@ acceptedAssignmentsCommand' assignmentsM = runGH process
 
 reportCommand :: Int -> FilePath -> IO ()
 reportCommand cid templateFile = do
-  (assignments, users, AssignmentReport reportData) <- runGH fetchData
+  (assignments, users, AssignmentReport reportData) <- fetchData
   t <- either error id <$> compileTemplateFile templateFile
   putStrLn $ render Nothing $ renderTemplate t $ object
     [ "assignments" .= assignments
@@ -129,10 +129,10 @@ reportCommand cid templateFile = do
       in map student users
     ]
  where
-  fetchData :: GitHubT IO ([Assignment], [User], AssignmentReport)
+  fetchData :: IO ([Assignment], [User], AssignmentReport)
   fetchData = do
-    assignments <- classroomAssignments cid
-    accepted <- concat <$> mapM (acceptedAssignments . [get| .id |]) assignments
+    assignments <- runGH $ classroomAssignments cid
+    accepted <- concat <$> mapConcurrently (runGH . acceptedAssignments . [get| .id |]) assignments
     let users = nub $ map fakeUser $ concatMap [get| .students[].login |] accepted
     report <- assignmentReport accepted
     pure (assignments, users, report)
@@ -150,11 +150,11 @@ reportCommand cid templateFile = do
       ]
 
 
-assignmentReport :: (MonadGitHubREST m, MonadUnliftIO m) => [AcceptedAssignment] -> m AssignmentReport
-assignmentReport xs = AssignmentReport . Map.fromList <$> mapM toMapPair xs
+assignmentReport :: [AcceptedAssignment] -> IO AssignmentReport
+assignmentReport xs = AssignmentReport . Map.fromList <$> mapConcurrently toMapPair xs
  where
-  toMapPair :: (MonadGitHubREST m, MonadUnliftIO m) => AcceptedAssignment -> m (RepoName, AssignmentStatus)
-  toMapPair a = (snd $ assignmentRepoParts a,) <$> assignmentStatus a
+  toMapPair :: AcceptedAssignment -> IO (RepoName, AssignmentStatus)
+  toMapPair a = runGH $ (snd $ assignmentRepoParts a,) <$> assignmentStatus a
 
 assignmentStatus :: (MonadGitHubREST m, MonadUnliftIO m) => AcceptedAssignment -> m AssignmentStatus
 assignmentStatus assignment = do

@@ -37,6 +37,7 @@ dependencies:
   - doctemplates
   - doclayout
   - optparse-applicative
+  - async
 
 ghc-options:
 - -Wall
