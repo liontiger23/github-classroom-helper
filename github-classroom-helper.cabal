@@ -47,6 +47,7 @@ library
     , doctemplates
     , github-rest
     , http-types
+    , mtl
     , optparse-applicative
     , split
     , text
@@ -76,6 +77,7 @@ executable github-classroom-helper-exe
     , github-classroom-helper
     , github-rest
     , http-types
+    , mtl
     , optparse-applicative
     , split
     , text
@@ -106,6 +108,7 @@ test-suite github-classroom-helper-test
     , github-classroom-helper
     , github-rest
     , http-types
+    , mtl
     , optparse-applicative
     , split
     , tasty

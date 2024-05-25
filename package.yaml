@@ -38,6 +38,7 @@ dependencies:
   - doclayout
   - optparse-applicative
   - async
+  - mtl
 
 ghc-options:
 - -Wall

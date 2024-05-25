@@ -11,8 +11,9 @@ module Helper.GitHub (
   User,
   get,
   readGHSettings,
-  runGitHubT,
-  runGitHubT',
+  runGH,
+  mapGHConcurrently,
+  withGHSettings,
 ) where
 
 import Data.Aeson.Schema (Object, schema, get)
@@ -23,8 +24,9 @@ import GitHub.REST (
  )
 import GitHub.REST.Auth (Token (..))
 import Helper.Util (safeReadFile)
-import Control.Monad.IO.Unlift (MonadIO)
 import GitHub.REST.Monad (GitHubT)
+import Control.Monad.Reader
+import Control.Concurrent.Async (mapConcurrently)
 
 
 type User = Object [schema|
@@ -92,8 +94,18 @@ type Review = Object [schema|
   }
 |]
 
-runGitHubT' :: MonadIO m => GitHubT m a -> GitHubSettings -> m a
-runGitHubT' = flip runGitHubT
+mapGHConcurrently :: (Traversable t) => (a -> GitHubT IO b) -> t a -> ReaderT GitHubSettings IO (t b)
+mapGHConcurrently action xs = do
+  settings <- ask
+  lift $ mapConcurrently (runGitHubT settings . action) xs
+
+runGH :: MonadIO m => GitHubT m a -> ReaderT GitHubSettings m a
+runGH action = do
+  settings <- ask
+  lift $ runGitHubT settings action
+
+withGHSettings :: ReaderT GitHubSettings IO a -> IO a
+withGHSettings action = readGHSettings >>= runReaderT action
 
 readGHSettings :: IO GitHubSettings
 readGHSettings = do
