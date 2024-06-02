@@ -116,7 +116,7 @@ reportCommand cid templateFile = do
       let
         result :: User -> Assignment -> Maybe Value
         result u a = fmap fromStatus (Map.lookup key reportData)
-         where key = [get| a.slug |] ++ "-" ++ [get| u.login |]
+         where key = ([get| u.login |], [get| a.id |])
         fromStatus :: AssignmentStatus -> Value
         fromStatus (AssignmentStatus g r) = object
           [ "grade"  .= g
@@ -153,10 +153,10 @@ reportCommand cid templateFile = do
 
 
 assignmentReport :: [AcceptedAssignment] -> ReaderT GitHubSettings IO AssignmentReport
-assignmentReport xs = AssignmentReport . Map.fromList <$> mapGHConcurrently toMapPair xs
+assignmentReport xs = AssignmentReport . Map.fromList . concat <$> mapGHConcurrently toMapPairs xs
  where
-  toMapPair :: (MonadGitHubREST m, MonadUnliftIO m) => AcceptedAssignment -> m (RepoName, AssignmentStatus)
-  toMapPair a = (snd $ assignmentRepoParts a,) <$> assignmentStatus a
+  toMapPairs :: (MonadGitHubREST m, MonadUnliftIO m) => AcceptedAssignment -> m [(AssignmentReportKey, AssignmentStatus)]
+  toMapPairs a = (\s -> (,s) <$> assignmentReportKeys a) <$> assignmentStatus a
 
 assignmentStatus :: (MonadGitHubREST m, MonadUnliftIO m) => AcceptedAssignment -> m AssignmentStatus
 assignmentStatus assignment = do
@@ -176,22 +176,31 @@ passedReview assignment = do
   let r = last reviews
   pure $ not (null reviews) && [get| r.state |] == "APPROVED"
  where
-  (owner, repo) = assignmentRepoParts assignment
+  (owner, repo) = repoParts [get| assignment.repository.full_name |]
 
-assignmentRepoParts :: AcceptedAssignment -> (OwnerName, RepoName)
-assignmentRepoParts a = repoParts [get| a.repository.full_name |]
+assignmentReportKeys :: AcceptedAssignment -> [AssignmentReportKey]
+assignmentReportKeys a = (,[get| a.assignment.id |]) <$> [get| a.students[].login |]
 
+
+-- | Splits full repo name into pair of owner and repository names.
+--
+-- >>> repoParts "owner/repo-name"
+-- ("owner","repo-name")
+--
 repoParts :: String -> (OwnerName, RepoName)
 repoParts name = case splitOn "/" name of
   [x, y] -> (x, y)
   _ -> error $ "Unexpected repository name " ++ name
 
+type StudentLogin = String
 type OwnerName = String
 type RepoName = String
 type Grade = String
 data AssignmentStatus = AssignmentStatus Grade Bool
   deriving (Eq, Show)
-newtype AssignmentReport = AssignmentReport (Map RepoName AssignmentStatus)
+type AssignmentID = Int
+type AssignmentReportKey = (StudentLogin, AssignmentID)
+newtype AssignmentReport = AssignmentReport (Map AssignmentReportKey AssignmentStatus)
 
 svgPoints :: (MonadGitHubREST m) => AcceptedAssignment -> m (Maybe String)
 svgPoints assignment = do
