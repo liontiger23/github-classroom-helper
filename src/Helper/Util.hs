@@ -21,7 +21,6 @@ import Text.PrettyPrint.Boxes qualified as Boxes
 import Text.XML
 import Control.Arrow (left)
 import Text.XML.Cursor
-import Data.Text.Read (decimal)
 import Data.Text (unpack)
 
 safeReadFile :: FilePath -> IO (Maybe B.ByteString)
@@ -30,9 +29,13 @@ safeReadFile f = (Just <$> B.readFile f) `catch` handler
     handler :: IOException -> IO (Maybe B.ByteString)
     handler _ = pure Nothing
 
+-- | Render table with 'header' and rows of 'xs' mapped by 'row' function.
+--
+-- Convenience wrapper around 'renderTable_'.
 renderTable :: [String] -> (a -> [String]) -> [a] -> String
 renderTable header row xs = renderTable_ header $ map row xs
 
+-- | Render aligned table with 'header' and 'rows'.
 renderTable_ :: [String] -> [[String]] -> String
 renderTable_ header rows =
   render
@@ -43,13 +46,12 @@ renderTable_ header rows =
 parseAndExtractPointsFromSvg :: B.ByteString -> Either String String
 parseAndExtractPointsFromSvg svg = do
   doc <- left show $ parseLBS def svg
-  case extractPointsFromSvg doc of
-    [] -> Left "No points extracted"
-    --[res] -> Right res
+  case extractTextContentsFromSvg doc of
+    -- hard-coded extraction of second text contents
     (_:x:_) -> Right x
-    --_ -> Left "Too many points extracted"
+    xs -> Left $ "Unexpected content extracted: " ++ show xs
 
-extractPointsFromSvg :: Document -> [String]
-extractPointsFromSvg doc = do
+extractTextContentsFromSvg :: Document -> [String]
+extractTextContentsFromSvg doc = do
    t <- fromDocument doc $// laxElement "text" &/ content
    pure $ unpack t
