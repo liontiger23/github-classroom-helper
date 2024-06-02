@@ -161,14 +161,19 @@ assignmentReport xs = AssignmentReport . Map.fromList . concat <$> mapGHConcurre
 assignmentStatus :: (MonadGitHubREST m, MonadUnliftIO m) => AcceptedAssignment -> m AssignmentStatus
 assignmentStatus assignment = do
   review <- passedReview assignment
-  grade <- case [get| assignment.grade |] of
-    Just g -> pure $ Just g
-    Nothing -> do
+  -- Can't trust GH Classroom grades! They are unreliable!
+  --
+  --grade <- case [get| assignment.grade |] of
+  --  Just g -> pure $ Just g
+  --  Nothing -> svgGrade
+  grade <- svgGrade
+  pure $ AssignmentStatus (fromMaybe "" grade) review
+ where
+  svgGrade = do
       res <- githubTry' status404 $ svgPoints assignment
       pure $ case res of
         Right g -> g
         Left e -> Nothing
-  pure $ AssignmentStatus (fromMaybe "" grade) review
 
 passedReview :: (MonadGitHubREST m) => AcceptedAssignment -> m Bool
 passedReview assignment = do
